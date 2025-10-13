@@ -186,8 +186,6 @@
     .then(msg => {
       displayElement.innerHTML = "<h3>Vielen Dank für Ihre Teilnahme! Ihre Daten wurden gespeichert.</h3>";
       console.log("Serverantwort:", msg);
-      clearAccumulatedTrials();
-      localStorage.removeItem("current_index");
     })
     .catch(err => {
       console.error(err);
@@ -197,6 +195,9 @@
         <h3>Fehler beim Speichern!</h3>
         <p>Eine CSV wurde heruntergeladen. Bitte senden Sie sie per E-Mail an die Studienleitung.</p>
       `;
+    }).finally(() => {
+      clearAccumulatedTrials();
+      localStorage.clear();
     });
   } else {
     let step = all_steps[index];
