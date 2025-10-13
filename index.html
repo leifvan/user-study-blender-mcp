@@ -80,9 +80,13 @@
   <div class="container" id="jspsych-target"></div>
 </body>
 <script>
+  const SAVE_URL = "https://user-study-relay.vercel.app/api/save";
+
   // ---------- Init jsPsych (render into #jspsych-target) ----------
   const displayElement = document.getElementById('jspsych-target');
   const jsPsych = initJsPsych({ display_element: displayElement });
+  const participant_id = new URL(location).searchParams.get('pid') ?? crypto.randomUUID();
+  jsPsych.data.addProperties({ participant_id, study: 'image_pairs_v1' });
 
   // ---------- Stimuli ----------
   const base_images = [
@@ -137,51 +141,42 @@
 
     localStorage.setItem("all_steps", JSON.stringify(steps));
     localStorage.setItem("current_index", "0");
-    localStorage.setItem("collected_data", "");
   }
 
   let all_steps = JSON.parse(localStorage.getItem("all_steps"));
   let index = parseInt(localStorage.getItem("current_index"),10);
 
-  // ---------- Hilfsfunktion: Daten als CSV anfügen ----------
-  function appendDataCSV(trialData){
-    let csv_line = "";
-    for (let key in trialData){
-      if (csv_line !== "") csv_line += ",";
-      csv_line += `"${trialData[key]}"`;
-    }
-    let existing = localStorage.getItem("collected_data");
-    if(existing && existing.length > 0){
-      existing += "\n" + csv_line;
-    } else {
-      let header = Object.keys(trialData).join(",");
-      existing = header + "\n" + csv_line;
-    }
-    localStorage.setItem("collected_data", existing);
-  }
-
   // ---------- Ablauf ----------
   if(index >= all_steps.length){
-    // Alles fertig → CSV an Node-Server schicken
-    let csv = localStorage.getItem("collected_data");
+    // Alles fertig → strukturierte Trials an Vercel schicken
+    const trials = jsPsych.data.get().values();   // array of trial objects
 
-    fetch("/save", {
+    fetch(SAVE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: csv, token: "ABC123" })
+      body: JSON.stringify({
+        study: "image_pairs_v1",   // optional label
+        trials                      // <-- send objects, not CSV
+      })
     })
-    .then(res => res.text())
+    .then(res => {
+      if (!res.ok) throw new Error("Save failed with status " + res.status);
+      return res.text();
+    })
     .then(msg => {
       displayElement.innerHTML = "<h3>Vielen Dank für Ihre Teilnahme! Ihre Daten wurden gespeichert.</h3>";
       console.log("Serverantwort:", msg);
+      localStorage.clear(); // clear only after success
     })
     .catch(err => {
-      displayElement.innerHTML = "<h3>Fehler beim Speichern!</h3>";
       console.error(err);
+      // Fallback: participant gets a CSV to email you
+      jsPsych.data.get().localSave('csv', 'backup_responses.csv');
+      displayElement.innerHTML = `
+        <h3>Fehler beim Speichern!</h3>
+        <p>Eine CSV wurde heruntergeladen. Bitte senden Sie sie per E-Mail an die Studienleitung.</p>
+      `;
     });
-
-    localStorage.clear();
-
   } else {
     let step = all_steps[index];
 
@@ -198,8 +193,8 @@
         `,
         choices: ["Ich stimme zu", "Ich stimme nicht zu"],
         on_finish: function(data){
+          data.section = 'consent';
           if(data.response == 0){
-            appendDataCSV({ consent: "accepted" });
             localStorage.setItem("current_index", index+1);
             window.location.reload();
           } else {
@@ -229,7 +224,7 @@
       `,
         choices: ["Weiter"],
         on_finish: function(data){
-          appendDataCSV(data);
+          data.section = 'intro';
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
@@ -253,7 +248,7 @@
           </p>
         `,
         on_finish: function(data){
-          appendDataCSV(data.response ? JSON.parse(JSON.stringify(data.response)) : data);
+          data.section = 'demographics';
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
@@ -276,9 +271,21 @@
           `<img src="${options[0]}" style="max-width:260px;">`,
           `<img src="${options[1]}" style="max-width:260px;">`
         ],
-        data: { base: step.base, option1: step.option1, option2: step.option2 },
+        data: {
+          section: 'trial',
+          base: step.base,
+          option1: step.option1,
+          option2: step.option2,
+          left_image: options[0],
+          right_image: options[1]
+        },
         on_finish: function(data){
-          appendDataCSV(data);
+          const choiceIndex = data.response;
+          const chosen = choiceIndex === 0 ? data.left_image : data.right_image;
+          data.choice_index = choiceIndex;
+          data.chosen_image = chosen;
+          data.is_option1 = Number(chosen === data.option1);
+          data.is_option2 = Number(chosen === data.option2);
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
@@ -292,7 +299,7 @@
         preamble: "<h3>Optionales Feedback</h3><p>Wenn Sie möchten, können Sie uns hier noch Ihre Kommentare oder Verbesserungsvorschläge hinterlassen:</p>",
         html: `<p><textarea name="feedback" rows="5" style="width:100%;"></textarea></p>`,
         on_finish: function(data){
-          appendDataCSV(data.response ? JSON.parse(JSON.stringify(data.response)) : data);
+          data.section = 'feedback';
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
@@ -301,7 +308,6 @@
 
     // --- Ende ---
     if(step.type === "end"){
-      appendDataCSV({status: "completed"});
       localStorage.setItem("current_index", index+1);
       window.location.reload();
     }
