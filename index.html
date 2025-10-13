@@ -80,12 +80,39 @@
   <div class="container" id="jspsych-target"></div>
 </body>
 <script>
+  // ---------- Configuration ----------
   const SAVE_URL = "https://user-study-relay.vercel.app/api/save";
+
+  // ---- Stable participant id across reloads ----
+  const PID_KEY = 'participant_id_v1';
+
+  function readUrlParam(name) {
+    const u = new URL(window.location.href);
+    return u.searchParams.get(name);
+  }
+
+  function getOrCreateParticipantId() {
+    // Priority: explicit ?pid=… in the URL (nice for Prolific/Sona)
+    const pidFromUrl = readUrlParam('pid');
+    if (pidFromUrl) {
+      localStorage.setItem(PID_KEY, pidFromUrl);
+      return pidFromUrl;
+    }
+    // Fallback: reuse a stored one
+    const existing = localStorage.getItem(PID_KEY);
+    if (existing) return existing;
+
+    // Generate once for this participant/session
+    const fresh = (crypto && crypto.randomUUID) ? crypto.randomUUID() :
+                  String(Math.random()).slice(2) + Date.now();
+    localStorage.setItem(PID_KEY, fresh);
+    return fresh;
+  }
+  const participant_id = getOrCreateParticipantId();
 
   // ---------- Init jsPsych (render into #jspsych-target) ----------
   const displayElement = document.getElementById('jspsych-target');
   const jsPsych = initJsPsych({ display_element: displayElement });
-  const participant_id = new URL(location).searchParams.get('pid') ?? crypto.randomUUID();
   jsPsych.data.addProperties({ participant_id, study: 'image_pairs_v1' });
 
   // ---------- Stimuli ----------
@@ -197,7 +224,8 @@
       `;
     }).finally(() => {
       clearAccumulatedTrials();
-      localStorage.clear();
+      localStorage.removeItem('current_index'); // your step progress
+      localStorage.removeItem('all_steps');     // if you store step list
     });
   } else {
     let step = all_steps[index];
