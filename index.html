@@ -129,6 +129,26 @@
     return jsPsych.randomization.shuffle(trials);
   }
 
+  // ---- persist trials across reloads ----
+  const TRIALS_KEY = 'accumulated_trials_v1';
+
+  function appendTrials(trialsArray) {
+    try {
+      const prev = JSON.parse(localStorage.getItem(TRIALS_KEY) || '[]');
+      const next = prev.concat(trialsArray || []);
+      localStorage.setItem(TRIALS_KEY, JSON.stringify(next));
+    } catch (_) { /* ignore */ }
+  }
+
+  function getAccumulatedTrials() {
+    try { return JSON.parse(localStorage.getItem(TRIALS_KEY) || '[]'); }
+    catch { return []; }
+  }
+
+  function clearAccumulatedTrials() {
+    localStorage.removeItem(TRIALS_KEY);
+  }
+
   // ---------- Initialisierung LocalStorage ----------
   if(!localStorage.getItem("all_steps")){
     let steps = [];
@@ -149,7 +169,7 @@
   // ---------- Ablauf ----------
   if(index >= all_steps.length){
     // Alles fertig → strukturierte Trials an Vercel schicken
-    const trials = jsPsych.data.get().values();   // array of trial objects
+    const trials = getAccumulatedTrials().concat(jsPsych.data.get().values());
 
     fetch(SAVE_URL, {
       method: "POST",
@@ -166,7 +186,8 @@
     .then(msg => {
       displayElement.innerHTML = "<h3>Vielen Dank für Ihre Teilnahme! Ihre Daten wurden gespeichert.</h3>";
       console.log("Serverantwort:", msg);
-      localStorage.clear(); // clear only after success
+      clearAccumulatedTrials();
+      localStorage.removeItem("current_index");
     })
     .catch(err => {
       console.error(err);
@@ -194,6 +215,7 @@
         choices: ["Ich stimme zu", "Ich stimme nicht zu"],
         on_finish: function(data){
           data.section = 'consent';
+          appendTrials(jsPsych.data.get().values());
           if(data.response == 0){
             localStorage.setItem("current_index", index+1);
             window.location.reload();
@@ -225,6 +247,7 @@
         choices: ["Weiter"],
         on_finish: function(data){
           data.section = 'intro';
+          appendTrials(jsPsych.data.get().values());
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
@@ -249,6 +272,7 @@
         `,
         on_finish: function(data){
           data.section = 'demographics';
+          appendTrials(jsPsych.data.get().values());
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
@@ -286,6 +310,7 @@
           data.chosen_image = chosen;
           data.is_option1 = Number(chosen === data.option1);
           data.is_option2 = Number(chosen === data.option2);
+          appendTrials(jsPsych.data.get().values());
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
@@ -300,6 +325,7 @@
         html: `<p><textarea name="feedback" rows="5" style="width:100%;"></textarea></p>`,
         on_finish: function(data){
           data.section = 'feedback';
+          appendTrials(jsPsych.data.get().values());
           localStorage.setItem("current_index", index+1);
           window.location.reload();
         }
