@@ -2,369 +2,355 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Online-Studie</title>
+  <title>Online-Studie / Online Study</title>
   <script src="https://unpkg.com/jspsych@7.3.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-survey-html-form"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response"></script>
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css">
   <style>
-    /* Ensure full-height and remove default margins */
-    html, body {
-      height: 100%;
-      margin: 0;
-    }
-
-    /* Center everything in the viewport */
+    html, body { height: 100%; margin: 0; }
     body {
-      display: flex;
-      align-items: center;    /* vertikal zentrieren */
-      justify-content: center;/* horizontal zentrieren */
-      min-height: 100vh;
-      padding: 20px;
-      font-family: sans-serif;
-      text-align: center;
-      background: #fff;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 20px;
+      font-family: sans-serif; text-align: center; background: #fff;
     }
-
-    /* Constraining container that stays centered */
     .container {
-      width: 100%;
-      max-width: 900px;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
+      width: 100%; max-width: 900px; box-sizing: border-box;
+      display: flex; flex-direction: column; align-items: center;
     }
-
-    /* Make sure common jsPsych containers are centered */
-    #jspsych-target,
-    #jspsych,
-    .jspsych-display-element,
-    .jspsych-content {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      box-sizing: border-box;
-    }
-
-    img {
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      max-width: 100%;
-      height: auto;
-    }
-
-    /* Make survey forms center their fields */
-    .jspsych-survey-form form {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    /* Keep the instruction list nicely constrained but centered */
-    ul {
-      text-align: left;
-      max-width: 600px;
-      margin: 0 auto 1rem auto;
-    }
+    img { border: 1px solid #ccc; border-radius: 4px; max-width: 100%; height: auto; }
+    ul { text-align: left; max-width: 600px; margin: 0 auto 1rem auto; }
   </style>
 </head>
 <body>
-  <!-- Dedicated container for jsPsych so we can keep the page centered -->
   <div class="container" id="jspsych-target"></div>
 </body>
 <script>
-  // ---------- Configuration ----------
+  // ---------- Backend-Konfiguration ----------
   const SAVE_URL = "https://user-study-relay.vercel.app/api/save";
+  const STUDY_NAME = "image_pairs_bilingual_v1";
 
-  // ---- Stable participant id across reloads ----
+  // ---------- Teilnehmer-ID ----------
   const PID_KEY = 'participant_id_v1';
-
   function readUrlParam(name) {
     const u = new URL(window.location.href);
     return u.searchParams.get(name);
   }
-
   function getOrCreateParticipantId() {
-    // Priority: explicit ?pid=… in the URL (nice for Prolific/Sona)
     const pidFromUrl = readUrlParam('pid');
     if (pidFromUrl) {
       localStorage.setItem(PID_KEY, pidFromUrl);
       return pidFromUrl;
     }
-    // Fallback: reuse a stored one
     const existing = localStorage.getItem(PID_KEY);
     if (existing) return existing;
-
-    // Generate once for this participant/session
-    const fresh = (crypto && crypto.randomUUID) ? crypto.randomUUID() :
-                  String(Math.random()).slice(2) + Date.now();
+    const fresh = (crypto && crypto.randomUUID) ? crypto.randomUUID()
+                 : String(Math.random()).slice(2) + Date.now();
     localStorage.setItem(PID_KEY, fresh);
     return fresh;
   }
   const participant_id = getOrCreateParticipantId();
 
-  // ---------- Init jsPsych (render into #jspsych-target) ----------
+  // ---------- Init jsPsych ----------
   const displayElement = document.getElementById('jspsych-target');
   const jsPsych = initJsPsych({ display_element: displayElement });
-  jsPsych.data.addProperties({ participant_id, study: 'image_pairs_v1' });
+  jsPsych.data.addProperties({ participant_id, study: STUDY_NAME });
 
-  // ---------- Stimuli ----------
-  const base_images = [
-    "bahn.jpg","baum.jpg","bäume.jpg","berg.jpg","berge.jpg",
-    "haus.jpg","hütte.jpg","schnee.jpg","turm.jpg","weg.jpg"
-  ];
-
-  const result_images = {
-    bahn: ["bahn0.jpg","bahn1.jpg","bahn2.jpg","bahn3.jpg"],
-    baum: ["baum0.jpg","baum1.jpg","baum2.jpg","baum3.jpg"],
-    bäume: ["bäume0.jpg","bäume1.jpg","bäume2.jpg","bäume3.jpg"],
-    berg: ["berg0.jpg","berg1.jpg","berg2.jpg","berg3.jpg"],
-    berge: ["berge0.jpg","berge1.jpg","berge2.jpg","berge3.jpg"],
-    haus: ["haus0.jpg","haus1.jpg","haus2.jpg","haus3.jpg"],
-    hütte: ["hütte0.jpg","hütte1.jpg","hütte2.jpg","hütte3.jpg"],
-    schnee: ["schnee0.jpg","schnee1.jpg","schnee2.jpg","schnee3.jpg"],
-    turm: ["turm0.jpg","turm1.jpg","turm2.jpg","turm3.jpg"],
-    weg: ["weg0.jpg","weg1.jpg","weg2.jpg","weg3.jpg"]
-  };
-
-  // ---------- Trials vorbereiten ----------
-  function createTrials(){
-    let trials = [];
-    base_images.forEach(base => {
-      let key = base.replace(".jpg","");
-      let res = result_images[key];
-      let pairs = [
-        [res[0],res[1]],[res[0],res[2]],[res[0],res[3]],
-        [res[1],res[2]],[res[1],res[3]],[res[2],res[3]]
-      ];
-      jsPsych.randomization.shuffle(pairs).slice(0,6).forEach(pair => {
-        trials.push({
-          type: "trial",
-          base: base,
-          option1: pair[0],
-          option2: pair[1]
-        });
-      });
-    });
-    return jsPsych.randomization.shuffle(trials);
-  }
-
-  // ---- persist trials across reloads ----
-  const TRIALS_KEY = 'accumulated_trials_v1';
-
-  function appendTrials(trialsArray) {
-    try {
-      const prev = JSON.parse(localStorage.getItem(TRIALS_KEY) || '[]');
-      const next = prev.concat(trialsArray || []);
-      localStorage.setItem(TRIALS_KEY, JSON.stringify(next));
-    } catch (_) { /* ignore */ }
-  }
-
-  function getAccumulatedTrials() {
-    try { return JSON.parse(localStorage.getItem(TRIALS_KEY) || '[]'); }
-    catch { return []; }
-  }
-
-  function clearAccumulatedTrials() {
-    localStorage.removeItem(TRIALS_KEY);
-  }
-
-  // ---------- Initialisierung LocalStorage ----------
-  if(!localStorage.getItem("all_steps")){
-    let steps = [];
-    steps.push({ type: "consent" });
-    steps.push({ type: "intro" });
-    steps.push({ type: "demographics" });
-    steps.push(...createTrials());
-    steps.push({ type: "feedback" }); // Feedback-Schritt direkt vor Ende
-    steps.push({ type: "end" });
-
-    localStorage.setItem("all_steps", JSON.stringify(steps));
-    localStorage.setItem("current_index", "0");
-  }
-
-  let all_steps = JSON.parse(localStorage.getItem("all_steps"));
-  let index = parseInt(localStorage.getItem("current_index"),10);
-
-  // ---------- Ablauf ----------
-  if(index >= all_steps.length){
-    // Alles fertig → strukturierte Trials an Vercel schicken
-    const trials = getAccumulatedTrials().concat(jsPsych.data.get().values());
-
-    fetch(SAVE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        study: "image_pairs_v1",   // optional label
-        trials                      // <-- send objects, not CSV
-      })
-    })
-    .then(res => {
-      if (!res.ok) throw new Error("Save failed with status " + res.status);
-      return res.text();
-    })
-    .then(msg => {
-      displayElement.innerHTML = "<h3>Vielen Dank für Ihre Teilnahme! Ihre Daten wurden gespeichert.</h3>";
-      console.log("Serverantwort:", msg);
-    })
-    .catch(err => {
-      console.error(err);
-      // Fallback: participant gets a CSV to email you
-      jsPsych.data.get().localSave('csv', 'backup_responses.csv');
-      displayElement.innerHTML = `
-        <h3>Fehler beim Speichern!</h3>
-        <p>Eine CSV wurde heruntergeladen. Bitte senden Sie sie per E-Mail an die Studienleitung.</p>
-      `;
-    }).finally(() => {
-      clearAccumulatedTrials();
-      localStorage.removeItem('current_index'); // your step progress
-      localStorage.removeItem('all_steps');     // if you store step list
-    });
-  } else {
-    let step = all_steps[index];
-
-    // --- Einwilligung ---
-    if(step.type === "consent"){
-      jsPsych.run([{
-        type: jsPsychHtmlButtonResponse,
-        stimulus: `
-          <h2>Einverständniserklärung</h2>
-          <p>Sie nehmen freiwillig an dieser anonymen Online-Studie teil. 
-          Es werden keine personenbezogenen Daten erhoben, die Rückschlüsse auf Ihre Identität erlauben. 
-          Ihre Daten werden ausschließlich für wissenschaftliche Zwecke anonym ausgewertet.</p>
-          <p>Mit Klick auf „Ich stimme zu“ erklären Sie Ihr Einverständnis zur Teilnahme.</p>
-        `,
-        choices: ["Ich stimme zu", "Ich stimme nicht zu"],
-        on_finish: function(data){
-          data.section = 'consent';
-          appendTrials(jsPsych.data.get().values());
-          if(data.response == 0){
-            localStorage.setItem("current_index", index+1);
-            window.location.reload();
-          } else {
-            displayElement.innerHTML = "<h3>Sie haben die Teilnahme abgelehnt. Vielen Dank!</h3>";
-            localStorage.clear();
-          }
-        }
-      }]);
-    }
-
-    // --- Intro ---
-    if(step.type === "intro"){
-      jsPsych.run([{
-        type: jsPsychHtmlButtonResponse,
-        stimulus: `
-        <h2>Willkommen zur Studie</h2>
-        <p>In dieser Studie werden Ihnen nacheinander mehrere Bildpaare gezeigt. 
-        Oben auf dem Bildschirm sehen Sie immer ein Basisbild. 
-        Darunter erscheinen zwei Varianten, die automatisch generiert wurden.
-        Ihre Aufgabe ist es, jeweils die Variante auszuwählen, 
-        die Ihrer Einschätzung nach am besten zum Basisbild passt.</p>
+  // ---------- Sprachsystem ----------
+  let language = localStorage.getItem("language");
+  const translations = {
+    de: {
+      consent_title: "Einverständniserklärung",
+      consent_text: `
+        Sie nehmen freiwillig an dieser anonymen Online-Studie teil.
+        Es werden keine personenbezogenen Daten erhoben.
+        Ihre Antworten werden anonym gespeichert und ausschließlich zu Forschungszwecken genutzt.
+        Sie können die Studie jederzeit abbrechen.
+        Mit einem Klick auf „Ich stimme zu“ erklären Sie sich mit der Teilnahme einverstanden.
+      `,
+      consent_choices: ["Ich stimme zu", "Ich lehne ab"],
+      intro_title: "Willkommen zur Studie",
+      intro_text: `
+        In dieser Studie werden Ihnen mehrere Bildpaare gezeigt.
+        Oben sehen Sie ein Basisbild, darunter zwei Varianten.
+        Wählen Sie bitte das Bild aus, das Ihrer Meinung nach am besten zum oberen Bild passt.
+      `,
+      intro_details: `
         <ul>
-          <li>Insgesamt durchlaufen Sie ca. 60 Bildvergleiche.</li>
+          <li>Insgesamt bearbeiten Sie 60 Bildvergleiche.</li>
           <li>Es gibt keine richtigen oder falschen Antworten!</li>
         </ul>
-        <p>Wenn Sie bereit sind, klicken Sie auf „Weiter“, um mit den demographischen Fragen zu beginnen.</p>
       `,
-        choices: ["Weiter"],
-        on_finish: function(data){
-          data.section = 'intro';
-          appendTrials(jsPsych.data.get().values());
-          localStorage.setItem("current_index", index+1);
-          window.location.reload();
-        }
-      }]);
+      intro_continue: "Weiter",
+      demo_title: "Bitte geben Sie einige demografische Angaben an:",
+      age_label: "Alter:",
+      gender_label: "Geschlecht:",
+      gender_options: `
+        <option value="">Keine Angabe</option>
+        <option value="w">Weiblich</option>
+        <option value="m">Männlich</option>
+        <option value="d">Divers</option>
+      `,
+      trial_question: "Welches der beiden Bilder passt besser zum oberen Bild?",
+      feedback_title: "Optionales Feedback",
+      feedback_text: "Wenn Sie möchten, können Sie hier Kommentare oder Anmerkungen hinterlassen:",
+      end_text: "Vielen Dank für Ihre Teilnahme! Ihre Daten wurden gespeichert.",
+      error_text: "Beim Speichern ist ein Fehler aufgetreten!"
+    },
+    en: {
+      consent_title: "Consent Form",
+      consent_text: `
+        You are voluntarily participating in this anonymous online study.
+        No personally identifiable data are collected.
+        Your responses are stored anonymously and used for research purposes only.
+        You may withdraw at any time.
+        By clicking “I agree”, you consent to participate.
+      `,
+      consent_choices: ["I agree", "I do not agree"],
+      intro_title: "Welcome to the Study",
+      intro_text: `
+        In this study, you will be shown several pairs of images.
+        The top image is the base image, and below are two generated variants.
+        Please choose the one that best matches the top image.
+      `,
+      intro_details: `
+        <ul>
+          <li>You will complete 60 image comparisons.</li>
+          <li>There are no right or wrong answers!</li>
+        </ul>
+      `,
+      intro_continue: "Continue",
+      demo_title: "Please provide some demographic information:",
+      age_label: "Age:",
+      gender_label: "Gender:",
+      gender_options: `
+        <option value="">Prefer not to say</option>
+        <option value="f">female</option>
+        <option value="m">male</option>
+        <option value="d">diverse</option>
+      `,
+      trial_question: "Which of the two images best matches the top image?",
+      feedback_title: "Optional Feedback",
+      feedback_text: "If you wish, you can leave comments or suggestions below:",
+      end_text: "Thank you for your participation! Your data has been saved.",
+      error_text: "Error while saving data!"
+    }
+  };
+
+  // ---------- Sprachwahl ----------
+  if(!language){
+    jsPsych.run([{
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<h2>Bitte wählen Sie eine Sprache / Please select a language</h2>`,
+      choices: ["Deutsch", "English"],
+      on_finish: function(data){
+        language = data.response == 0 ? "de" : "en";
+        localStorage.setItem("language", language);
+        window.location.reload();
+      }
+    }]);
+  } else {
+    const t = translations[language];
+
+    // ---------- Stimuli ----------
+    const base_images = ["bahn.jpg","baum.jpg","bäume.jpg","berg.jpg","berge.jpg","haus.jpg","hütte.jpg","schnee.jpg","turm.jpg","weg.jpg"];
+    const result_images = {
+      bahn:["bahn0.jpg","bahn1.jpg","bahn2.jpg","bahn3.jpg"],
+      baum:["baum0.jpg","baum1.jpg","baum2.jpg","baum3.jpg"],
+      bäume:["bäume0.jpg","bäume1.jpg","bäume2.jpg","bäume3.jpg"],
+      berg:["berg0.jpg","berg1.jpg","berg2.jpg","berg3.jpg"],
+      berge:["berge0.jpg","berge1.jpg","berge2.jpg","berge3.jpg"],
+      haus:["haus0.jpg","haus1.jpg","haus2.jpg","haus3.jpg"],
+      hütte:["hütte0.jpg","hütte1.jpg","hütte2.jpg","hütte3.jpg"],
+      schnee:["schnee0.jpg","schnee1.jpg","schnee2.jpg","schnee3.jpg"],
+      turm:["turm0.jpg","turm1.jpg","turm2.jpg","turm3.jpg"],
+      weg:["weg0.jpg","weg1.jpg","weg2.jpg","weg3.jpg"]
+    };
+
+    function createTrials(){
+      let trials = [];
+      base_images.forEach(base => {
+        let key = base.replace(".jpg","");
+        let res = result_images[key];
+        let pairs = [
+          [res[0],res[1]],[res[0],res[2]],[res[0],res[3]],
+          [res[1],res[2]],[res[1],res[3]],[res[2],res[3]]
+        ];
+        jsPsych.randomization.shuffle(pairs).slice(0,6).forEach(pair => {
+          trials.push({type:"trial",base:base,option1:pair[0],option2:pair[1]});
+        });
+      });
+      return jsPsych.randomization.shuffle(trials);
     }
 
-    // --- Demographie ---
-    if(step.type === "demographics"){
-      jsPsych.run([{
-        type: jsPsychSurveyHtmlForm,
-        preamble: "<h3>Bitte geben Sie einige demographische Angaben an:</h3>",
-        html: `
-          <p>Alter: <input name="age" type="number" required></p>
-          <p>Geschlecht: 
-            <select name="gender" required>
-              <option value="">Bitte wählen</option>
-              <option value="w">weiblich</option>
-              <option value="m">männlich</option>
-              <option value="d">divers</option>
-            </select>
-          </p>
-        `,
-        on_finish: function(data){
-          data.section = 'demographics';
-          appendTrials(jsPsych.data.get().values());
-          localStorage.setItem("current_index", index+1);
-          window.location.reload();
-        }
-      }]);
+    // ---------- Speicherverwaltung ----------
+    const TRIALS_KEY = 'accumulated_trials_v1';
+    function appendTrials() {
+      const newData = jsPsych.data.get().values();
+      const prev = JSON.parse(localStorage.getItem(TRIALS_KEY) || '[]');
+      localStorage.setItem(TRIALS_KEY, JSON.stringify(prev.concat(newData)));
+    }
+    function getAccumulatedTrials() {
+      try { return JSON.parse(localStorage.getItem(TRIALS_KEY) || '[]'); }
+      catch { return []; }
+    }
+    function clearAccumulatedTrials() {
+      localStorage.removeItem(TRIALS_KEY);
     }
 
-    // --- Trial ---
-    if(step.type === "trial"){
-      let options = [step.option1, step.option2];
-      options = jsPsych.randomization.shuffle(options);
+    // ---------- Ablaufsteuerung ----------
+    if(!localStorage.getItem("all_steps")){
+      let steps = [];
+      steps.push({ type: "consent" });
+      steps.push({ type: "intro" });
+      steps.push({ type: "demographics" });
+      steps.push(...createTrials());
+      steps.push({ type: "feedback" });
+      steps.push({ type: "end" });
 
-      jsPsych.run([{
-        type: jsPsychHtmlButtonResponse,
-        stimulus: `
-          <div>
-            <img src="${step.base}" style="max-width:300px;"><br>
-            <p>Welches der beiden Bilder passt Ihrer Einschätzung nach besser zum oberen Bild?</p>
-          </div>`,
-        choices: [
-          `<img src="${options[0]}" style="max-width:260px;">`,
-          `<img src="${options[1]}" style="max-width:260px;">`
-        ],
-        data: {
-          section: 'trial',
-          base: step.base,
-          option1: step.option1,
-          option2: step.option2,
-          left_image: options[0],
-          right_image: options[1]
-        },
-        on_finish: function(data){
-          const choiceIndex = data.response;
-          const chosen = choiceIndex === 0 ? data.left_image : data.right_image;
-          data.choice_index = choiceIndex;
-          data.chosen_image = chosen;
-          data.is_option1 = Number(chosen === data.option1);
-          data.is_option2 = Number(chosen === data.option2);
-          appendTrials(jsPsych.data.get().values());
-          localStorage.setItem("current_index", index+1);
-          window.location.reload();
-        }
-      }]);
+      localStorage.setItem("all_steps", JSON.stringify(steps));
+      localStorage.setItem("current_index", "0");
     }
 
-    // --- Feedback ---
-    if(step.type === "feedback"){
-      jsPsych.run([{
-        type: jsPsychSurveyHtmlForm,
-        preamble: "<h3>Optionales Feedback</h3><p>Wenn Sie möchten, können Sie uns hier noch Ihre Kommentare oder Verbesserungsvorschläge hinterlassen:</p>",
-        html: `<p><textarea name="feedback" rows="5" style="width:100%;"></textarea></p>`,
-        on_finish: function(data){
-          data.section = 'feedback';
-          appendTrials(jsPsych.data.get().values());
-          localStorage.setItem("current_index", index+1);
-          window.location.reload();
-        }
-      }]);
-    }
+    let all_steps = JSON.parse(localStorage.getItem("all_steps"));
+    let index = parseInt(localStorage.getItem("current_index"),10);
 
-    // --- Ende ---
-    if(step.type === "end"){
-      localStorage.setItem("current_index", index+1);
-      window.location.reload();
+    if(index >= all_steps.length){
+      const trials = getAccumulatedTrials().concat(jsPsych.data.get().values());
+      fetch(SAVE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          study: STUDY_NAME,
+          language,
+          participant_id,
+          trials
+        })
+      })
+      .then(res => {
+        if(!res.ok) throw new Error("Server returned " + res.status);
+        return res.text();
+      })
+      .then(msg => {
+        displayElement.innerHTML = `<h3>${t.end_text}</h3>`;
+        console.log("Server:", msg);
+      })
+      .catch(err => {
+        console.error(err);
+        jsPsych.data.get().localSave('csv', 'backup_responses.csv');
+        displayElement.innerHTML = `<h3>${t.error_text}</h3><p>Eine Sicherung (CSV) wurde heruntergeladen.</p>`;
+      })
+      .finally(() => {
+        clearAccumulatedTrials();
+        localStorage.clear();
+      });
+    } else {
+      let step = all_steps[index];
+
+      // --- Consent ---
+      if(step.type === "consent"){
+        jsPsych.run([{
+          type: jsPsychHtmlButtonResponse,
+          stimulus: `<h2>${t.consent_title}</h2><p>${t.consent_text}</p>`,
+          choices: t.consent_choices,
+          on_finish: function(data){
+            data.section = "consent";
+            appendTrials();
+            if(data.response == 0){
+              localStorage.setItem("current_index", index+1);
+              window.location.reload();
+            } else {
+              displayElement.innerHTML = "<h3>Vielen Dank!</h3>";
+              localStorage.clear();
+            }
+          }
+        }]);
+      }
+
+      // --- Intro ---
+      if(step.type === "intro"){
+        jsPsych.run([{
+          type: jsPsychHtmlButtonResponse,
+          stimulus: `<h2>${t.intro_title}</h2><p>${t.intro_text}</p>${t.intro_details}<p><img src="nutzerstudie.jpg" style="max-width:300px;"></p>`,
+          choices: [t.intro_continue],
+          on_finish: function(data){
+            data.section = "intro";
+            appendTrials();
+            localStorage.setItem("current_index", index+1);
+            window.location.reload();
+          }
+        }]);
+      }
+
+      // --- Demographics ---
+      if(step.type === "demographics"){
+        jsPsych.run([{
+          type: jsPsychSurveyHtmlForm,
+          preamble: `<h3>${t.demo_title}</h3>`,
+          html: `
+            <p>${t.age_label}<input name="age" type="number" min="1" max="120" step="1" placeholder="25"></p>
+            <p>${t.gender_label}<select name="gender">${t.gender_options}</select></p>
+          `,
+          button_label: t.intro_continue,
+          on_finish: function(data){
+            data.section = "demographics";
+            appendTrials();
+            localStorage.setItem("current_index", index+1);
+            window.location.reload();
+          }
+        }]);
+      }
+
+      // --- Trials ---
+      if(step.type === "trial"){
+        let options = [step.option1, step.option2];
+        options = jsPsych.randomization.shuffle(options);
+        jsPsych.run([{
+          type: jsPsychHtmlButtonResponse,
+          stimulus: `<div><img src="${step.base}" style="max-width:300px;"><p>${t.trial_question}</p></div>`,
+          choices: [
+            `<img src="${options[0]}" style="max-width:260px;">`,
+            `<img src="${options[1]}" style="max-width:260px;">`
+          ],
+          data: {
+            section: "trial",
+            base: step.base,
+            option1: step.option1,
+            option2: step.option2,
+            left_image: options[0],
+            right_image: options[1]
+          },
+          on_finish: function(data){
+            const choice = data.response;
+            data.chosen_image = choice === 0 ? data.left_image : data.right_image;
+            appendTrials();
+            localStorage.setItem("current_index", index+1);
+            window.location.reload();
+          }
+        }]);
+      }
+
+      // --- Feedback ---
+      if(step.type === "feedback"){
+        jsPsych.run([{
+          type: jsPsychSurveyHtmlForm,
+          preamble: `<h3>${t.feedback_title}</h3><p>${t.feedback_text}</p>`,
+          html: `<p><textarea name="feedback" rows="5" style="width:100%;"></textarea></p>`,
+          button_label: t.intro_continue,
+          on_finish: function(data){
+            data.section = "feedback";
+            appendTrials();
+            localStorage.setItem("current_index", index+1);
+            window.location.reload();
+          }
+        }]);
+      }
+
+      // --- Ende ---
+      if(step.type === "end"){
+        localStorage.setItem("current_index", index+1);
+        window.location.reload();
+      }
     }
   }
 </script>
